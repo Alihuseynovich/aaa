@@ -1,0 +1,255 @@
+HTML
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PEYSƏR DETEKTORU</title>
+
+<style>
+    body {
+        margin: 0;
+        background: #080808;
+        color: white;
+        font-family: Arial, sans-serif;
+        text-align: center;
+    }
+
+    h1 {
+        color: red;
+        margin-top: 20px;
+    }
+
+    video {
+        width: 90%;
+        max-width: 600px;
+        border: 3px solid #333;
+        border-radius: 12px;
+        margin-top: 15px;
+    }
+
+    #warning {
+        display: none;
+        color: white;
+        background: red;
+        font-size: 42px;
+        font-weight: bold;
+        padding: 20px;
+        margin: 20px auto;
+        animation: flash 0.4s infinite;
+    }
+
+    @keyframes flash {
+        0%, 100% { background: red; }
+        50% { background: darkred; }
+    }
+
+    #light {
+        width: 45px;
+        height: 45px;
+        background: #300000;
+        border-radius: 50%;
+        margin: 20px auto;
+        box-shadow: 0 0 10px #300000;
+    }
+
+    #light.active {
+        animation: redflash 0.4s infinite;
+    }
+
+    @keyframes redflash {
+        0%, 100% {
+            background: red;
+            box-shadow: 0 0 35px red;
+        }
+        50% {
+            background: #300000;
+            box-shadow: none;
+        }
+    }
+
+    button {
+        padding: 15px 25px;
+        font-size: 18px;
+        font-weight: bold;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 10px;
+    }
+
+    #start {
+        background: limegreen;
+    }
+
+    #stop {
+        background: #ff3333;
+        color: white;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>🚨 PEYSƏR DETEKTORU 🚨</h1>
+
+<div id="light"></div>
+
+<div id="warning">PEYSƏR!</div>
+
+<video id="camera" autoplay playsinline muted></video>
+
+<br>
+
+<button id="start">📷 KAMERANI AÇ</button>
+<button id="stop">🛑 DAYANDIR</button>
+
+<p id="status">Kameranı açmaq üçün düyməyə bas.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+<script>
+const video = document.getElementById("camera");
+const warning = document.getElementById("warning");
+const light = document.getElementById("light");
+const statusText = document.getElementById("status");
+
+let stream = null;
+let model = null;
+let running = false;
+let alerting = false;
+let audioContext = null;
+let lastAlert = 0;
+
+async function startCamera() {
+    try {
+        statusText.textContent = "Model yüklənir...";
+
+        if (!model) {
+            model = await cocoSsd.load();
+        }
+
+        // Kamera icazəsi
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        // Səs yalnız istifadəçi düyməyə basdıqdan sonra başladılır
+        audioContext = new (
+            window.AudioContext || window.webkitAudioContext
+        )();
+
+        await audioContext.resume();
+
+        running = true;
+        statusText.textContent = "Kamera aktivdir. İnsan axtarılır...";
+        detectPerson();
+
+    } catch (error) {
+        statusText.textContent =
+            "Kamera açıla bilmədi. İcazəni yoxla və HTTPS istifadə et.";
+        console.error(error);
+    }
+}
+
+function playAlarm() {
+    if (!audioContext || audioContext.state !== "running") return;
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = "square";
+    oscillator.frequency.value = 880;
+
+    gain.gain.value = 0.15;
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.25);
+}
+
+function showWarning() {
+    const now = Date.now();
+
+    warning.style.display = "block";
+    light.classList.add("active");
+    statusText.textContent = "🚨 İNSAN AŞKARLANDI!";
+
+    // Səsin hər kadrda təkrar çalınmasının qarşısını alır
+    if (now - lastAlert > 1200) {
+        playAlarm();
+        lastAlert = now;
+    }
+
+    alerting = true;
+}
+
+function hideWarning() {
+    warning.style.display = "none";
+    light.classList.remove("active");
+    statusText.textContent = "Kamera aktivdir. İnsan axtarılır...";
+    alerting = false;
+}
+
+async function detectPerson() {
+    while (running) {
+        if (video.readyState >= 2 && model) {
+            try {
+                const predictions = await model.detect(video);
+
+                // COCO-SSD modelinin "person" sinfi
+                const personFound = predictions.some(item =>
+                    item.class === "person" &&
+                    item.score >= 0.60
+                );
+
+                if (personFound) {
+                    showWarning();
+                } else if (alerting) {
+                    hideWarning();
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 250));
+    }
+}
+
+function stopCamera() {
+    running = false;
+
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+
+    video.srcObject = null;
+
+    if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+    }
+
+    warning.style.display = "none";
+    light.classList.remove("active");
+    statusText.textContent = "Kamera dayandırılıb.";
+    alerting = false;
+}
+
+document.getElementById("start").addEventListener("click", startCamera);
+document.getElementById("stop").addEventListener("click", stopCamera);
+</script>
+
+</body>
+</html>
+
+Copied
