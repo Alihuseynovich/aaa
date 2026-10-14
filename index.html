@@ -1,255 +1,354 @@
-HTML
+
 <!DOCTYPE html>
 <html lang="az">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PEYSƏR DETEKTORU</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#090909">
+  <title>PEYSƏR DEDEKTORU 10.5</title>
 
-<style>
+  <style>
+    * { box-sizing: border-box; }
+
     body {
-        margin: 0;
-        background: #080808;
-        color: white;
-        font-family: Arial, sans-serif;
-        text-align: center;
+      margin: 0;
+      background: #090909;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    header {
+      padding: 20px 8px;
+      border-bottom: 2px solid #e50914;
+      background: #141414;
     }
 
     h1 {
-        color: red;
-        margin-top: 20px;
+      margin: 0;
+      color: #ff2020;
+      font-size: 23px;
+      letter-spacing: 1px;
     }
 
-    video {
-        width: 90%;
-        max-width: 600px;
-        border: 3px solid #333;
-        border-radius: 12px;
-        margin-top: 15px;
+    .version {
+      color: #aaa;
+      font-size: 12px;
+      margin-top: 7px;
     }
 
-    #warning {
-        display: none;
-        color: white;
-        background: red;
-        font-size: 42px;
-        font-weight: bold;
-        padding: 20px;
-        margin: 20px auto;
-        animation: flash 0.4s infinite;
+    #status {
+      margin: 14px 10px;
+      color: #ffd54a;
+      font-size: 14px;
+    }
+
+    .camera {
+      position: relative;
+      width: 100%;
+      background: #000;
+      overflow: hidden;
+      min-height: 240px;
+      aspect-ratio: 3 / 4;
+      max-height: 65vh;
+    }
+
+    video, canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      inset: 0;
+      object-fit: cover;
+    }
+
+    video { transform: scaleX(1); }
+    canvas { pointer-events: none; }
+
+    #alert {
+      display: none;
+      background: #c90000;
+      color: white;
+      padding: 14px;
+      font-weight: bold;
+      animation: flash .7s infinite alternate;
     }
 
     @keyframes flash {
-        0%, 100% { background: red; }
-        50% { background: darkred; }
+      from { opacity: 1; }
+      to { opacity: .55; }
     }
 
-    #light {
-        width: 45px;
-        height: 45px;
-        background: #300000;
-        border-radius: 50%;
-        margin: 20px auto;
-        box-shadow: 0 0 10px #300000;
-    }
-
-    #light.active {
-        animation: redflash 0.4s infinite;
-    }
-
-    @keyframes redflash {
-        0%, 100% {
-            background: red;
-            box-shadow: 0 0 35px red;
-        }
-        50% {
-            background: #300000;
-            box-shadow: none;
-        }
+    .controls {
+      padding: 16px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
     }
 
     button {
-        padding: 15px 25px;
-        font-size: 18px;
-        font-weight: bold;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        margin: 10px;
+      border: 0;
+      border-radius: 9px;
+      padding: 15px 8px;
+      font-size: 15px;
+      font-weight: bold;
+      color: white;
+      background: #252525;
     }
 
-    #start {
-        background: limegreen;
-    }
+    #start { background: #b60000; }
+    button:disabled { opacity: .45; }
 
-    #stop {
-        background: #ff3333;
-        color: white;
+    .info {
+      margin: 0 15px 20px;
+      color: #aaa;
+      font-size: 12px;
+      line-height: 1.6;
     }
-</style>
+  </style>
 </head>
 
 <body>
+  <header>
+    <h1>PEYSƏR DEDEKTORU</h1>
+    <div class="version">HTML5 • VERSION 10.5</div>
+  </header>
 
-<h1>🚨 PEYSƏR DETEKTORU 🚨</h1>
+  <div id="status">Model yüklənir...</div>
 
-<div id="light"></div>
+  <div class="camera">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
 
-<div id="warning">PEYSƏR!</div>
+  <div id="alert">⚠ İNSAN AŞKARLANDI!</div>
 
-<video id="camera" autoplay playsinline muted></video>
+  <div class="controls">
+    <button id="start" disabled>KAMERANI AÇ</button>
+    <button id="switch" disabled>KAMERANI DƏYİŞ</button>
+    <button id="sound">🔊 SƏSİ AKTİV ET</button>
+    <button id="stop" disabled>DAYANDIR</button>
+  </div>
 
-<br>
+  <div class="info">
+    Sistem kamera görüntüsündə insanları aşkar etməyə çalışır.
+    Kamera icazəsi tələb olunur. İlk model yüklənməsi internet
+    bağlantısı tələb edir.
+  </div>
 
-<button id="start">📷 KAMERANI AÇ</button>
-<button id="stop">🛑 DAYANDIR</button>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 
-<p id="status">Kameranı açmaq üçün düyməyə bas.</p>
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const alertEl = document.getElementById("alert");
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+    let model = null;
+    let stream = null;
+    let facingMode = "environment";
+    let running = false;
+    let soundEnabled = false;
+    let lastAlert = 0;
+    let busy = false;
 
-<script>
-const video = document.getElementById("camera");
-const warning = document.getElementById("warning");
-const light = document.getElementById("light");
-const statusText = document.getElementById("status");
+    async function loadModel() {
+      try {
+        statusEl.textContent = "Süni intellekt modeli yüklənir...";
+        model = await cocoSsd.load();
+        statusEl.textContent = "Hazırdır. Kameranı aça bilərsən.";
+        document.getElementById("start").disabled = false;
+      } catch (err) {
+        statusEl.textContent =
+          "Model yüklənmədi. İnternet bağlantısını yoxla.";
+        console.error(err);
+      }
+    }
 
-let stream = null;
-let model = null;
-let running = false;
-let alerting = false;
-let audioContext = null;
-let lastAlert = 0;
+    async function startCamera() {
+      if (!model) return;
 
-async function startCamera() {
-    try {
-        statusText.textContent = "Model yüklənir...";
+      stopCamera();
 
-        if (!model) {
-            model = await cocoSsd.load();
-        }
+      try {
+        statusEl.textContent = "Kamera icazəsi gözlənilir...";
 
-        // Kamera icazəsi
         stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: false
+          audio: false,
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 640 },
+            height: { ideal: 800 }
+          }
         });
 
         video.srcObject = stream;
         await video.play();
 
-        // Səs yalnız istifadəçi düyməyə basdıqdan sonra başladılır
-        audioContext = new (
-            window.AudioContext || window.webkitAudioContext
-        )();
-
-        await audioContext.resume();
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
         running = true;
-        statusText.textContent = "Kamera aktivdir. İnsan axtarılır...";
-        detectPerson();
+        document.getElementById("stop").disabled = false;
+        document.getElementById("switch").disabled = false;
+        document.getElementById("start").textContent = "YENİDƏN AÇ";
 
-    } catch (error) {
-        statusText.textContent =
-            "Kamera açıla bilmədi. İcazəni yoxla və HTTPS istifadə et.";
-        console.error(error);
-    }
-}
-
-function playAlarm() {
-    if (!audioContext || audioContext.state !== "running") return;
-
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-
-    oscillator.type = "square";
-    oscillator.frequency.value = 880;
-
-    gain.gain.value = 0.15;
-
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.25);
-}
-
-function showWarning() {
-    const now = Date.now();
-
-    warning.style.display = "block";
-    light.classList.add("active");
-    statusText.textContent = "🚨 İNSAN AŞKARLANDI!";
-
-    // Səsin hər kadrda təkrar çalınmasının qarşısını alır
-    if (now - lastAlert > 1200) {
-        playAlarm();
-        lastAlert = now;
+        statusEl.textContent = "İnsan aşkarlanması aktivdir.";
+        detectLoop();
+      } catch (err) {
+        statusEl.textContent =
+          "Kamera açıla bilmədi. İcazəni və HTTPS bağlantısını yoxla.";
+        console.error(err);
+      }
     }
 
-    alerting = true;
-}
+    function stopCamera() {
+      running = false;
 
-function hideWarning() {
-    warning.style.display = "none";
-    light.classList.remove("active");
-    statusText.textContent = "Kamera aktivdir. İnsan axtarılır...";
-    alerting = false;
-}
-
-async function detectPerson() {
-    while (running) {
-        if (video.readyState >= 2 && model) {
-            try {
-                const predictions = await model.detect(video);
-
-                // COCO-SSD modelinin "person" sinfi
-                const personFound = predictions.some(item =>
-                    item.class === "person" &&
-                    item.score >= 0.60
-                );
-
-                if (personFound) {
-                    showWarning();
-                } else if (alerting) {
-                    hideWarning();
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 250));
-    }
-}
-
-function stopCamera() {
-    running = false;
-
-    if (stream) {
+      if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
+      }
+
+      video.srcObject = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      alertEl.style.display = "none";
+
+      document.getElementById("stop").disabled = true;
+      document.getElementById("switch").disabled = true;
+      statusEl.textContent = model
+        ? "Dayandırılıb."
+        : "Model yüklənir...";
     }
 
-    video.srcObject = null;
+    async function detectLoop() {
+      if (!running || busy || !model) return;
+      if (video.readyState < 2) {
+        requestAnimationFrame(detectLoop);
+        return;
+      }
 
-    if (audioContext) {
-        audioContext.close();
-        audioContext = null;
+      busy = true;
+
+      try {
+        const predictions = await model.detect(video);
+        if (!running) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const people = predictions.filter(p =>
+          p.class === "person" && p.score >= 0.55
+        );
+
+        for (const person of people) {
+          const [x, y, w, h] = person.bbox;
+
+          ctx.strokeStyle = "#ff1010";
+          ctx.lineWidth = Math.max(3, canvas.width / 180);
+          ctx.strokeRect(x, y, w, h);
+
+          const label = "INSAN " +
+            Math.round(person.score * 100) + "%";
+
+          ctx.font = "bold 16px Arial";
+          const labelWidth = ctx.measureText(label).width + 12;
+          const labelY = Math.max(0, y - 28);
+
+          ctx.fillStyle = "#e60000";
+          ctx.fillRect(x, labelY, labelWidth, 27);
+
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(label, x + 6, labelY + 19);
+        }
+
+        if (people.length > 0) {
+          statusEl.textContent =
+            "İnsan sayı: " + people.length;
+          alertEl.style.display = "block";
+          warn();
+        } else {
+          statusEl.textContent = "İnsan aşkarlanmadı.";
+          alertEl.style.display = "none";
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        busy = false;
+        if (running) {
+          setTimeout(detectLoop, 100);
+        }
+      }
     }
 
-    warning.style.display = "none";
-    light.classList.remove("active");
-    statusText.textContent = "Kamera dayandırılıb.";
-    alerting = false;
-}
+    function warn() {
+      const now = Date.now();
 
-document.getElementById("start").addEventListener("click", startCamera);
-document.getElementById("stop").addEventListener("click", stopCamera);
-</script>
+      // Xəbərdarlıq təkrarını 2 saniyədə bir məhdudlaşdır.
+      if (now - lastAlert < 2000) return;
+      lastAlert = now;
 
+      if (soundEnabled) {
+        try {
+          const AudioContextClass =
+            window.AudioContext || window.webkitAudioContext;
+
+          const audio = new AudioContextClass();
+          const oscillator = audio.createOscillator();
+          const gain = audio.createGain();
+
+          oscillator.type = "square";
+          oscillator.frequency.value = 880;
+          gain.gain.value = 0.15;
+
+          oscillator.connect(gain);
+          gain.connect(audio.destination);
+
+          oscillator.start();
+          oscillator.stop(audio.currentTime + 0.25);
+          oscillator.onended = () => audio.close();
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      if ("vibrate" in navigator) {
+        navigator.vibrate(250);
+      }
+    }
+
+    document.getElementById("start").addEventListener(
+      "click", startCamera
+    );
+
+    document.getElementById("stop").addEventListener(
+      "click", stopCamera
+    );
+
+    document.getElementById("switch").addEventListener(
+      "click", async () => {
+        facingMode = facingMode === "environment"
+          ? "user"
+          : "environment";
+        await startCamera();
+      }
+    );
+
+    document.getElementById("sound").addEventListener(
+      "click", () => {
+        soundEnabled = !soundEnabled;
+        document.getElementById("sound").textContent =
+          soundEnabled ? "🔊 SƏS AKTİVDİR" : "🔇 SƏS SÖNÜB";
+      }
+    );
+
+    if (!navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia) {
+      statusEl.textContent =
+        "Kamera üçün HTTPS bağlantısı tələb olunur.";
+    }
+
+    loadModel();
+  </script>
 </body>
 </html>
-
-Copied
